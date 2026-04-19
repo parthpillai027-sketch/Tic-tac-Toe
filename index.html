@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Tic Tac Toe</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --color-x: #38bdf8;
+            --color-o: #f43f5e;
+            --color-win: #22c55e;
+        }
+
+        body {
+            font-family: 'Outfit', sans-serif;
+            background: radial-gradient(circle at top left, #1e1b4b 0%, #020617 100%);
+            color: white;
+            overflow: hidden;
+            height: 100vh;
+            width: 100vw;
+            margin: 0;
+        }
+
+        /* Glassmorphism */
+        .glass {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.8);
+        }
+
+        /* Animations */
+        @keyframes popIn {
+            0% { transform: scale(0.8); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+        }
+
+        .animate-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        .animate-slide { animation: slideUp 0.5s ease-out forwards; }
+        
+        .pulse-x { animation: pulse 2s infinite ease-in-out; filter: drop-shadow(0 0 8px var(--color-x)); }
+        .pulse-o { animation: pulse 2s infinite ease-in-out; filter: drop-shadow(0 0 8px var(--color-o)); }
+
+        /* Game Elements */
+        .cell {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .cell:hover:not(.occupied):not(.ai-thinking) {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+
+        .text-x { color: var(--color-x); text-shadow: 0 0 20px rgba(56, 189, 248, 0.4); }
+        .text-o { color: var(--color-o); text-shadow: 0 0 20px rgba(244, 63, 94, 0.4); }
+
+        .board-x .cell:not(.occupied):not(.ai-thinking):hover::after {
+            content: 'X';
+            position: absolute;
+            color: var(--color-x);
+            opacity: 0.1;
+            font-size: 4rem;
+        }
+
+        .board-o .cell:not(.occupied):not(.ai-thinking):hover::after {
+            content: 'O';
+            position: absolute;
+            color: var(--color-o);
+            opacity: 0.1;
+            font-size: 4rem;
+        }
+
+        .win-cell {
+            background: rgba(34, 197, 94, 0.15) !important;
+            border-color: var(--color-win) !important;
+            box-shadow: 0 0 20px rgba(34, 197, 94, 0.3);
+            z-index: 10;
+        }
+
+        .screen {
+            display: none;
+            opacity: 0;
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            transform: scale(0.95);
+        }
+
+        .screen.active {
+            display: flex;
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        .ai-thinking { cursor: wait !important; opacity: 0.8; }
+
+        .refresh-btn:active svg {
+            transform: rotate(-45deg);
+            transition: transform 0.2s;
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center">
+
+    <!-- START SCREEN -->
+    <div id="start-screen" class="screen active flex-col items-center justify-center w-full max-w-md p-10 glass rounded-[2.5rem] text-center mx-4">
+        <div class="mb-10">
+            <h1 class="text-7xl font-black tracking-tighter mb-3 bg-clip-text text-transparent bg-gradient-to-br from-white via-indigo-300 to-indigo-500">
+                TIC<br>TAC<br>TOE
+            </h1>
+            <p class="text-indigo-200/60 text-lg font-light tracking-widest uppercase">Master the Grid</p>
+        </div>
+        
+        <div class="flex flex-col gap-6 w-full">
+            <p class="text-white/80 font-medium text-sm uppercase tracking-widest">Select Your Weapon</p>
+            <div class="flex gap-4">
+                <button onclick="startGame('X')" class="flex-1 py-6 rounded-2xl bg-white/5 border border-white/10 hover:border-sky-500/50 hover:bg-sky-500/10 transition-all transform hover:-translate-y-1 active:scale-95 text-x text-5xl font-black">
+                    X
+                </button>
+                <button onclick="startGame('O')" class="flex-1 py-6 rounded-2xl bg-white/5 border border-white/10 hover:border-rose-500/50 hover:bg-rose-500/10 transition-all transform hover:-translate-y-1 active:scale-95 text-o text-5xl font-black">
+                    O
+                </button>
+            </div>
+            <button onclick="quitGame()" class="mt-4 text-white/40 hover:text-white transition-colors text-sm font-semibold uppercase tracking-widest">
+                Exit Game
+            </button>
+        </div>
+    </div>
+
+    <!-- GAME SCREEN -->
+    <div id="game-screen" class="screen flex-col items-center w-full max-w-md p-6 glass rounded-[2.5rem] mx-4">
+        <!-- Top Bar -->
+        <div class="w-full flex justify-between items-center mb-8">
+            <button onclick="confirmRestart()" class="refresh-btn w-12 h-12 flex items-center justify-center rounded-2xl bg-white/5 border border-white/5 hover:border-white/20 hover:bg-white/10 transition-all text-white/60 hover:text-white group shadow-inner">
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="group-hover:rotate-12 transition-transform"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M3 21v-5h5"/></svg>
+            </button>
+            
+            <div id="status-container" class="flex items-center gap-3 px-6 py-2.5 rounded-2xl bg-black/20 border border-white/5">
+                <div id="status-indicator" class="w-2.5 h-2.5 rounded-full bg-sky-400 pulse-x"></div>
+                <span id="status-text" class="font-bold text-sm tracking-widest uppercase text-white/90">X's Turn</span>
+            </div>
+
+            <div class="w-12 h-12"></div> <!-- Balance Spacer -->
+        </div>
+
+        <!-- Board -->
+        <div id="board-container" class="grid grid-cols-3 gap-3.5 w-full aspect-square bg-white/5 p-3.5 rounded-[2rem] border border-white/10">
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="0"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="1"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="2"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="3"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="4"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="5"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="6"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="7"></div>
+            <div class="cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent" data-index="8"></div>
+        </div>
+
+        <!-- Result Overlay (hidden by default) -->
+        <div id="end-controls" class="w-full mt-8 hidden animate-slide">
+            <button onclick="showScreen('start-screen')" class="w-full py-4 rounded-2xl bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-lg transition-all shadow-lg shadow-indigo-600/20 active:scale-95">
+                Restart Game
+            </button>
+        </div>
+    </div>
+
+    <!-- QUIT SCREEN -->
+    <div id="quit-screen" class="screen flex-col items-center justify-center w-full max-w-md p-10 glass rounded-[2.5rem] text-center mx-4">
+        <h2 class="text-4xl font-black mb-4 text-white">GAME OVER</h2>
+        <p class="text-indigo-200/60 mb-10 tracking-widest uppercase text-sm">Thanks for playing</p>
+        <button onclick="showScreen('start-screen')" class="px-10 py-4 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-all font-bold tracking-widest uppercase text-xs">
+            Back to Menu
+        </button>
+    </div>
+
+    <script>
+        let board = ['', '', '', '', '', '', '', '', ''];
+        let playerSymbol = 'X';
+        let aiSymbol = 'O';
+        let currentPlayer = 'X';
+        let gameActive = false;
+        let isAiTurn = false;
+
+        const winningConditions = [
+            [0, 1, 2], [3, 4, 5], [6, 7, 8],
+            [0, 3, 6], [1, 4, 7], [2, 5, 8],
+            [0, 4, 8], [2, 4, 6]
+        ];
+
+        const cells = document.querySelectorAll('.cell');
+        const statusText = document.getElementById('status-text');
+        const statusIndicator = document.getElementById('status-indicator');
+        const endControls = document.getElementById('end-controls');
+        const boardContainer = document.getElementById('board-container');
+
+        function showScreen(screenId) {
+            document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+            setTimeout(() => {
+                document.querySelectorAll('.screen').forEach(s => s.style.display = 'none');
+                const next = document.getElementById(screenId);
+                next.style.display = 'flex';
+                setTimeout(() => next.classList.add('active'), 50);
+            }, 300);
+        }
+
+        function startGame(symbol) {
+            playerSymbol = symbol;
+            aiSymbol = symbol === 'X' ? 'O' : 'X';
+            showScreen('game-screen');
+            initGame();
+        }
+
+        function initGame() {
+            board = ['', '', '', '', '', '', '', '', ''];
+            currentPlayer = 'X'; 
+            gameActive = true;
+            isAiTurn = false;
+            endControls.classList.add('hidden');
+            updateUI();
+            
+            cells.forEach(cell => {
+                cell.innerText = '';
+                cell.className = 'cell bg-white/5 rounded-2xl flex items-center justify-center text-6xl font-black cursor-pointer select-none border border-transparent';
+            });
+
+            if (aiSymbol === 'X') makeAiMove();
+        }
+
+        function confirmRestart() {
+            // No alert/confirm per instructions, using direct logic or we could build a custom modal.
+            // For now, let's just trigger the screen switch as it's the standard flow requested earlier.
+            showScreen('start-screen');
+        }
+
+        function quitGame() { showScreen('quit-screen'); }
+
+        function updateUI() {
+            statusText.innerText = `${currentPlayer}'s Turn`;
+            statusIndicator.className = `w-2.5 h-2.5 rounded-full ${currentPlayer === 'X' ? 'bg-sky-400 pulse-x' : 'bg-rose-500 pulse-o'}`;
+            
+            boardContainer.classList.remove('board-x', 'board-o');
+            if (gameActive && !isAiTurn) {
+                boardContainer.classList.add(`board-${currentPlayer.toLowerCase()}`);
+            }
+        }
+
+        function handleCellClick(e) {
+            const index = parseInt(e.target.getAttribute('data-index'));
+            if (board[index] !== '' || !gameActive || isAiTurn) return;
+
+            executeMove(index);
+            if (gameActive) makeAiMove();
+        }
+
+        function executeMove(index) {
+            board[index] = currentPlayer;
+            const cell = cells[index];
+            cell.innerText = currentPlayer;
+            cell.classList.add('occupied', 'animate-pop', currentPlayer === 'X' ? 'text-x' : 'text-o');
+
+            if (checkWin()) return;
+            if (checkDraw()) return;
+
+            currentPlayer = currentPlayer === 'X' ? 'O' : 'X';
+            updateUI();
+        }
+
+        function makeAiMove() {
+            isAiTurn = true;
+            boardContainer.classList.add('ai-thinking');
+            cells.forEach(c => c.classList.add('ai-thinking'));
+
+            setTimeout(() => {
+                if (!gameActive) return;
+
+                let moveIndex = findBestMove(aiSymbol);
+                if (moveIndex === -1) moveIndex = findBestMove(playerSymbol);
+                
+                if (moveIndex === undefined || moveIndex === -1) {
+                    const available = board.map((v, i) => v === '' ? i : null).filter(v => v !== null);
+                    moveIndex = available[Math.floor(Math.random() * available.length)];
+                }
+
+                isAiTurn = false;
+                boardContainer.classList.remove('ai-thinking');
+                cells.forEach(c => c.classList.remove('ai-thinking'));
+                if (moveIndex !== undefined) executeMove(moveIndex);
+            }, 800);
+        }
+
+        function findBestMove(symbol) {
+            for (let cond of winningConditions) {
+                const vals = cond.map(i => board[i]);
+                if (vals.filter(v => v === symbol).length === 2 && vals.indexOf('') !== -1) {
+                    return cond[vals.indexOf('')];
+                }
+            }
+            return -1;
+        }
+
+        function checkWin() {
+            for (let cond of winningConditions) {
+                const [a, b, c] = cond;
+                if (board[a] && board[a] === board[b] && board[a] === board[c]) {
+                    gameActive = false;
+                    statusText.innerText = `${currentPlayer} Wins!`;
+                    statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-green-500";
+                    cond.forEach(i => cells[i].classList.add('win-cell'));
+                    endControls.classList.remove('hidden');
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        function checkDraw() {
+            if (!board.includes('')) {
+                gameActive = false;
+                statusText.innerText = "Draw!";
+                statusIndicator.className = "w-2.5 h-2.5 rounded-full bg-white/40";
+                endControls.classList.remove('hidden');
+                return true;
+            }
+            return false;
+        }
+
+        cells.forEach(cell => cell.addEventListener('click', handleCellClick));
+    </script>
+</body>
+</html>
